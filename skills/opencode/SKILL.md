@@ -57,8 +57,8 @@ architecture-sensitive work, complex logic, and high-correctness tasks.
 
 1. `cx/gpt-5.6-sol`
 2. `bbgt/kimi-k2.7-code`
-3. `glm-5.3`
-4. `cx/gpt-6-astra`
+3. `cx/gpt-6-astra`
+4. `glm-5.3`
 5. `ag/claude-opus-4-6-thinking`
 6. `deepseek-v4-pro[1m]`
 

@@ -21,7 +21,7 @@ level's list.
 
 | Level | Used for | Model pool (tried in order) |
 |---|---|---|
-| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-5.6-sol` → `bbgt/kimi-k2.7-code` → `glm-5.3` → `cx/gpt-6-astra` → `ag/claude-opus-4-6-thinking` → `deepseek-v4-pro[1m]` |
+| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-5.6-sol` → `bbgt/kimi-k2.7-code` → `cx/gpt-6-astra` → `glm-5.3` → `ag/claude-opus-4-6-thinking` → `deepseek-v4-pro[1m]` |
 | 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-5.6-terra` → `glm-5` → `bbgt/mimo-v2.5-pro` → `bbgt/glm-5.2` → `deepseek-v4.1-flash` → `ag/claude-sonnet-4-6-thinking` |
 | 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-5.6-luna` → `mimo-v2.5` → `cx/gpt-5.4-mini` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3-flash` |
 
