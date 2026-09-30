@@ -10,7 +10,46 @@ The repo has two parts:
 | Path | What it is |
 |---|---|
 | `opencode-mcp.mjs` | The MCP server. One file, Node 18+, no `npm install`. Runs on macOS, Linux and Windows. |
-| `skills/opencode/SKILL.md` | An agent skill that tells the host agent *when* and *how* to delegate: model tiers, fallback rules, handoff prompt template, and how to verify the worker's changes. |
+| `skills/opencode/SKILL.md` | An agent skill that tells the host agent *when* and *how* to delegate. It covers the three levels (High, Medium, Low) that match a model to the task's difficulty, the fallback rules, the handoff prompt template, and how to verify the worker's changes. |
+
+## ⭐ Three levels: High, Medium, Low
+
+The `opencode` skill sorts every delegated task into one of **three levels** and picks the
+model by how hard the task is. You don't choose a model yourself. Just describe the task, and
+the agent works out the difficulty, picks the level, and starts from the first model in that
+level's list.
+
+| Level | Used for | Model pool (tried in order) |
+|---|---|---|
+| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-5.6-sol` → `bbgt/kimi-k2.7-code` → `glm-5.3` → `cx/gpt-6-astra` → `ag/claude-opus-4-6-thinking` → `deepseek-v4-pro[1m]` |
+| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-5.6-terra` → `glm-5` → `bbgt/mimo-v2.5-pro` → `bbgt/glm-5.2` → `deepseek-v4.1-flash` → `ag/claude-sonnet-4-6-thinking` |
+| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-5.6-luna` → `mimo-v2.5` → `cx/gpt-5.4-mini` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3-flash` |
+
+How the choice is made:
+
+1. **Your choice wins.** If you name a level or a model, for example *"use opencode high"* or
+   *"use opencode with glm-5.3"*, the agent uses it.
+2. **Otherwise the agent judges the difficulty.** It reads the task, picks High, Medium or
+   Low, and starts from the first model in that list. When a task is ambiguous or risky, it
+   goes up a level rather than down.
+3. **Automatic fallback.** If a model is unavailable (rate limit or 429, quota used up,
+   overloaded, 5xx, or model not available), the next model in the same level is tried. The
+   MCP server does this itself through `fallback_models`.
+4. **Fallback only covers availability.** If the task itself fails, for example the code has
+   a bug or a file is missing, the agent does not switch models, because a different model
+   would not fix that.
+
+Examples:
+
+| You say | Level chosen |
+|---|---|
+| "use opencode to find where the `checkBudget` function is defined" | 🟢 Low |
+| "use opencode to add a `status` filter to the payments page, following the existing filters" | 🟡 Medium |
+| "use opencode to fix the race condition in the webhook that marks payments twice" | 🔴 High |
+| "use opencode **high** to review this file" | 🔴 High (you asked for it) |
+
+> The pools above are the author's AI Hub catalogue. Change them to match your own; see
+> [Customising the skill's model pools](#5-customising-the-skills-model-pools).
 
 ## What the server provides
 
