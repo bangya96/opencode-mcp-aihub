@@ -119,9 +119,13 @@ Examples:
 4. Check that it works:
 
    ```bash
-   opencode models ai-hub
+   opencode models | grep ai-hub        # Windows: opencode models | findstr ai-hub
    opencode run -m ai-hub/ag/gemini-3.8-flash-high "Reply with exactly the word: pong"
    ```
+
+   Use the piped form above: opencode 2.x no longer accepts a provider argument, so
+   `opencode models ai-hub` fails there with "Unexpected positional argument" (it only works
+   on 1.x). The MCP server itself calls plain `opencode models` and works on both.
 
 5. Clone this repo:
 
@@ -284,7 +288,7 @@ Set these in the `env` block (Claude Code) or `env = { ... }` under `[mcp_server
 ## 5. Customising the skill's model pools
 
 `skills/opencode/SKILL.md` has **High / Medium / Low** pools of model aliases. They reflect
-the author's AI Hub catalogue and will drift. Run `opencode models ai-hub`, or call the
+the author's AI Hub catalogue and will drift. Run `opencode models | grep ai-hub`, or call the
 `opencode_models` tool, and edit the pools so every alias exists in your catalogue. Aliases are
 written without the `ai-hub/` prefix, which the skill adds when calling.
 
