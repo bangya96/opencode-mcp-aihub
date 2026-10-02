@@ -109,12 +109,41 @@ Examples:
          },
          "models": {
            "cx/gpt-5.6-sol": { "name": "cx/gpt-5.6-sol (via AI Hub)" },
-           "ag/gemini-3.8-flash-high": { "name": "ag/gemini-3.8-flash-high (via AI Hub)" }
+           "bbgt/kimi-k2.7-code": { "name": "bbgt/kimi-k2.7-code (via AI Hub)" },
+           "cx/gpt-6-astra": { "name": "cx/gpt-6-astra (via AI Hub)" },
+           "glm-5.3": { "name": "glm-5.3 (via AI Hub)" },
+           "ag/claude-opus-4-6-thinking": { "name": "ag/claude-opus-4-6-thinking (via AI Hub)" },
+           "deepseek-v4-pro[1m]": { "name": "deepseek-v4-pro[1m] (via AI Hub)" },
+           "cx/gpt-5.6-terra": { "name": "cx/gpt-5.6-terra (via AI Hub)" },
+           "glm-5": { "name": "glm-5 (via AI Hub)" },
+           "bbgt/mimo-v2.5-pro": { "name": "bbgt/mimo-v2.5-pro (via AI Hub)" },
+           "bbgt/glm-5.2": { "name": "bbgt/glm-5.2 (via AI Hub)" },
+           "deepseek-v4.1-flash": { "name": "deepseek-v4.1-flash (via AI Hub)" },
+           "ag/claude-sonnet-4-6-thinking": { "name": "ag/claude-sonnet-4-6-thinking (via AI Hub)" },
+           "ag/gemini-3.8-flash-high": { "name": "ag/gemini-3.8-flash-high (via AI Hub)" },
+           "cx/gpt-5.6-luna": { "name": "cx/gpt-5.6-luna (via AI Hub)" },
+           "mimo-v2.5": { "name": "mimo-v2.5 (via AI Hub)" },
+           "cx/gpt-5.4-mini": { "name": "cx/gpt-5.4-mini (via AI Hub)" },
+           "ag/gemini-3.8-flash-medium": { "name": "ag/gemini-3.8-flash-medium (via AI Hub)" },
+           "ag/gemini-3-flash": { "name": "ag/gemini-3-flash (via AI Hub)" }
          }
        }
      }
    }
    ```
+
+   The `models` block above lists every alias in the skill's High / Medium / Low pools
+   (`skills/opencode/SKILL.md`). A pool alias missing from this block cannot be used:
+   the server rejects it with `model_not_configured`.
+
+   > **If you are an AI agent installing this for a user:** do not stop at copying the
+   > snippet. Open the user's existing `opencode.jsonc`, read the `models` block of the
+   > `ai-hub` provider, and compare it with every alias in the three pools of
+   > `skills/opencode/SKILL.md`. Add each missing alias under `models` (the key is the bare
+   > alias, without the `ai-hub/` prefix), keeping the user's existing entries, `baseURL`
+   > and `apiKey` untouched. Then run the check in step 4 and confirm every pool alias
+   > shows up as `ai-hub/<alias>`. If the user's AI Hub key has no access to an alias,
+   > remove it from the pools in `SKILL.md` instead of leaving it in.
 
 4. Check that it works:
 
@@ -289,7 +318,8 @@ Set these in the `env` block (Claude Code) or `env = { ... }` under `[mcp_server
 
 `skills/opencode/SKILL.md` has **High / Medium / Low** pools of model aliases. They reflect
 the author's AI Hub catalogue and will drift. Run `opencode models | grep ai-hub`, or call the
-`opencode_models` tool, and edit the pools so every alias exists in your catalogue. Aliases are
+`opencode_models` tool, and keep the two in step: every alias in the pools must also be under `models` in
+`opencode.jsonc` (section 1, step 3). Add a new alias to both, and remove one from both. Aliases are
 written without the `ai-hub/` prefix, which the skill adds when calling.
 
 ## 6. Windows notes
