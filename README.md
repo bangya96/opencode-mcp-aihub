@@ -21,9 +21,9 @@ level's list.
 
 | Level | Used for | Model pool (tried in order) |
 |---|---|---|
-| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-5.6-sol` → `cx/gpt-6-astra` → `glm-5.3` → `ag/claude-opus-4-6-thinking` → `deepseek-v4-pro[1m]` |
-| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-5.6-terra` → `glm-5` → `mimo-v2.5-pro` → `glm-5.2` → `deepseek-v4.1-flash` → `ag/claude-sonnet-4-6-thinking` |
-| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-5.6-luna` → `mimo-v2.5` → `cx/gpt-5.4-mini` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3-flash` |
+| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-5.6-sol` → `cx/gpt-6-astra` → `kimi-k3` → `glm-5.3` → `deepseek-v4-pro[1m]` → `ag/gemini-3.1-pro-high` |
+| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-5.6-terra` → `glm-5` → `mimo-v2.6-pro` → `glm-5.2` → `kimi-k2.6` → `ag/claude-sonnet-4-6-thinking` → `hy4-preview` |
+| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-5.6-luna` → `mimo-v2.6-flash` → `deepseek-v4.1-flash` → `minimax-m3` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3-flash` |
 
 How the choice is made:
 
@@ -110,19 +110,22 @@ Examples:
          "models": {
            "cx/gpt-5.6-sol": { "name": "cx/gpt-5.6-sol (via AI Hub)" },
            "cx/gpt-6-astra": { "name": "cx/gpt-6-astra (via AI Hub)" },
+           "kimi-k3": { "name": "kimi-k3 (via AI Hub)" },
            "glm-5.3": { "name": "glm-5.3 (via AI Hub)" },
-           "ag/claude-opus-4-6-thinking": { "name": "ag/claude-opus-4-6-thinking (via AI Hub)" },
            "deepseek-v4-pro[1m]": { "name": "deepseek-v4-pro[1m] (via AI Hub)" },
+           "ag/gemini-3.1-pro-high": { "name": "ag/gemini-3.1-pro-high (via AI Hub)" },
            "cx/gpt-5.6-terra": { "name": "cx/gpt-5.6-terra (via AI Hub)" },
            "glm-5": { "name": "glm-5 (via AI Hub)" },
-           "mimo-v2.5-pro": { "name": "mimo-v2.5-pro (via AI Hub)" },
+           "mimo-v2.6-pro": { "name": "mimo-v2.6-pro (via AI Hub)" },
            "glm-5.2": { "name": "glm-5.2 (via AI Hub)" },
-           "deepseek-v4.1-flash": { "name": "deepseek-v4.1-flash (via AI Hub)" },
+           "kimi-k2.6": { "name": "kimi-k2.6 (via AI Hub)" },
            "ag/claude-sonnet-4-6-thinking": { "name": "ag/claude-sonnet-4-6-thinking (via AI Hub)" },
+           "hy4-preview": { "name": "hy4-preview (via AI Hub)" },
            "ag/gemini-3.8-flash-high": { "name": "ag/gemini-3.8-flash-high (via AI Hub)" },
            "cx/gpt-5.6-luna": { "name": "cx/gpt-5.6-luna (via AI Hub)" },
-           "mimo-v2.5": { "name": "mimo-v2.5 (via AI Hub)" },
-           "cx/gpt-5.4-mini": { "name": "cx/gpt-5.4-mini (via AI Hub)" },
+           "mimo-v2.6-flash": { "name": "mimo-v2.6-flash (via AI Hub)" },
+           "deepseek-v4.1-flash": { "name": "deepseek-v4.1-flash (via AI Hub)" },
+           "minimax-m3": { "name": "minimax-m3 (via AI Hub)" },
            "ag/gemini-3.8-flash-medium": { "name": "ag/gemini-3.8-flash-medium (via AI Hub)" },
            "ag/gemini-3-flash": { "name": "ag/gemini-3-flash (via AI Hub)" }
          }
