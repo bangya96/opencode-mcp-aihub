@@ -56,11 +56,10 @@ Use for multi-file implementation, ambiguous requirements, subtle bugs,
 architecture-sensitive work, complex logic, and high-correctness tasks.
 
 1. `cx/gpt-5.6-sol`
-2. `bbgt/kimi-k2.7-code`
-3. `cx/gpt-6-astra`
-4. `glm-5.3`
-5. `ag/claude-opus-4-6-thinking`
-6. `deepseek-v4-pro[1m]`
+2. `cx/gpt-6-astra`
+3. `glm-5.3`
+4. `ag/claude-opus-4-6-thinking`
+5. `deepseek-v4-pro[1m]`
 
 ### Medium tier
 
@@ -69,8 +68,8 @@ moderate refactors, and ordinary implementation work.
 
 1. `cx/gpt-5.6-terra`
 2. `glm-5`
-3. `bbgt/mimo-v2.5-pro`
-4. `bbgt/glm-5.2`
+3. `mimo-v2.5-pro`
+4. `glm-5.2`
 5. `deepseek-v4.1-flash`
 6. `ag/claude-sonnet-4-6-thinking`
 
