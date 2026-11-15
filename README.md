@@ -75,6 +75,8 @@ Examples:
   A 429 shows up as `→ rate_limit (retry after 489s)`.
 - **Timeouts.** A timeout kills the whole process tree. That is the process group on POSIX and `taskkill /T` on Windows. Any partial output is returned.
 - **One editing worker per folder.** A second `allow_edits` run in the same `cwd` is refused while the first is still running.
+- **Read-only is enforced.** Without `allow_edits`, the run uses a dedicated `opencode-mcp-readonly` agent with no write, edit, shell or subagent tools; edit and bash are also denied globally, and the project's own opencode config is ignored (`OPENCODE_DISABLE_PROJECT_CONFIG`), so a repo cannot switch them back on. It can still read, search and fetch URLs. (Plain `opencode run` without `--auto` is *not* read-only: its default agent writes files and runs commands.) Tested on opencode 1.18.30.
+- **Arguments can't become flags.** `model`, `fallback_models`, `variant` and `session_id` must be plain ids that don't start with `-`, and every option is passed as a single `--name=value` argument.
 - **Other options.** `variant` passes reasoning effort, for example `high` or `max`. `session_id` continues an earlier session and `title` names it. Output is capped at 120k characters, keeping the head and tail.
 
 ---

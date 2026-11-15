@@ -45,8 +45,30 @@ const DEBUG = process.env.OPENCODE_MCP_DEBUG === '1';
 
 // allow_edits=false must not depend on the user's opencode config: by default
 // opencode's build agent writes files and runs shell commands without asking.
-// Denying both removes those tools for the run (read, search and fetch remain).
-const READ_ONLY_PERMISSION = JSON.stringify({ edit: 'deny', bash: 'deny' });
+// Read-only runs therefore use a dedicated agent with the edit, shell and
+// subagent tools removed, deny edit/bash globally as well, and ignore the
+// project's own opencode config so a repo cannot switch them back on.
+// Read, search and fetch remain.
+const READ_ONLY_AGENT = 'opencode-mcp-readonly';
+function readOnlyEnv(env) {
+  let content = {};
+  try { content = JSON.parse(env.OPENCODE_CONFIG_CONTENT || '{}') || {}; } catch {}
+  content.agent = {
+    ...(content.agent || {}),
+    [READ_ONLY_AGENT]: {
+      mode: 'primary',
+      description: 'Read-only worker started by opencode-mcp',
+      permission: { edit: 'deny', bash: 'deny' },
+      tools: { write: false, edit: false, patch: false, bash: false, task: false },
+    },
+  };
+  return {
+    ...env,
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(content),
+    OPENCODE_PERMISSION: JSON.stringify({ edit: 'deny', bash: 'deny' }),
+    OPENCODE_DISABLE_PROJECT_CONFIG: '1',
+  };
+}
 
 // Option values reach opencode as separate argv entries, so a value starting
 // with "-" would be parsed as a flag (a variant of "--auto" would switch on
@@ -265,8 +287,9 @@ const TOOLS = [
     description:
       'Ask opencode (a separate coding agent run via AI Hub) to answer a question, review code, ' +
       'investigate a codebase, or implement changes. Read-only by default: it can read and search ' +
-      'files, but its edit and shell tools are disabled; set allow_edits to let it change files ' +
-      'and run commands. Every call is a fresh ' +
+      'files, but it runs as a dedicated read-only agent without edit, shell or subagent tools and ' +
+      'ignores the project opencode config; set allow_edits to let it change files and run ' +
+      'commands. Every call is a fresh ' +
       'session with no memory of this conversation. The model is validated against the configured ' +
       'catalogue before running; on availability errors (rate limit, quota, overloaded, 5xx, model ' +
       'unavailable) it automatically tries fallback_models in order. Task-level failures (bad code, ' +
@@ -303,7 +326,7 @@ const TOOLS = [
           type: 'boolean',
           description:
             'Auto-approve file modifications so opencode can write code (passes --auto). Default ' +
-            'false: read-only, enforced by denying the edit and bash tools for the run. Only set true ' +
+            'false: read-only (dedicated agent without edit, shell or subagent tools). Only set true ' +
             'when the caller explicitly asked opencode to make ' +
             'changes. Refused if another editing run is already in flight in the same cwd.',
         },
@@ -490,12 +513,14 @@ function runOnce({ prompt, cwd, model, allowEdits, timeoutMs, variant, sessionId
       return;
     }
 
-    const args = ['run', '-m', model];
-    if (allowEdits) args.push('--auto');
-    if (cwd) args.push(`--dir=${cwd}`); // one argv entry, so a path can never be read as a flag
-    if (variant) args.push('--variant', variant);
-    if (sessionId) args.push('--session', sessionId);
-    args.push('--title', title);
+    // Every option is a single --name=value argv entry, so no value can be
+    // parsed as a flag of its own (e.g. a title that ends up as "--auto").
+    const args = ['run', `--model=${model}`];
+    args.push(allowEdits ? '--auto' : `--agent=${READ_ONLY_AGENT}`);
+    if (cwd) args.push(`--dir=${cwd}`);
+    if (variant) args.push(`--variant=${variant}`);
+    if (sessionId) args.push(`--session=${sessionId}`);
+    args.push(`--title=${title}`);
     // The prompt normally goes over stdin (`opencode run` reads it when stdin is
     // not a TTY): no command-line length limit, no shell quoting on any platform.
     if (PROMPT_VIA_ARGV) args.push('--', prompt); // "--" so a prompt starting with "-" is not parsed as a flag
@@ -506,7 +531,7 @@ function runOnce({ prompt, cwd, model, allowEdits, timeoutMs, variant, sessionId
       child = spawnOpencode(r, args, {
         cwd: cwd || process.cwd(),
         stdio: [PROMPT_VIA_ARGV ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-        env: allowEdits ? childEnv(r.bin) : { ...childEnv(r.bin), OPENCODE_PERMISSION: READ_ONLY_PERMISSION },
+        env: allowEdits ? childEnv(r.bin) : readOnlyEnv(childEnv(r.bin)),
         detached: !IS_WIN, // own process group on POSIX (see killGroup); on Windows this would pop a console
       });
     } catch (err) {
@@ -584,9 +609,10 @@ async function runWithFallback(a) {
   const timeoutMs = Number(a.timeout_ms) > 0 ? Number(a.timeout_ms) : DEFAULT_TIMEOUT_MS;
   const variant = typeof a.variant === 'string' && a.variant ? a.variant : undefined;
   const sessionId = typeof a.session_id === 'string' && a.session_id ? a.session_id : undefined;
-  // A title starting with "-" would be parsed by opencode as a flag.
+  // The title comes from the prompt: drop characters cmd.exe would act on, then
+  // any leading "-" (it is also passed as a single --title=… entry).
   const rawTitle = (typeof a.title === 'string' && a.title.trim()) || prompt.split('\n').find((l) => l.trim()) || '';
-  const title = rawTitle.trim().replace(/^[-\s]+/, '').slice(0, 80) || 'opencode-mcp';
+  const title = rawTitle.replace(/["%!\r\n]/g, ' ').trim().replace(/^[-\s]+/, '').slice(0, 80) || 'opencode-mcp';
   for (const [k, v] of [['variant', variant], ['session_id', sessionId]]) {
     if (v !== undefined && !isSafeArg(v)) {
       return toolText(`status: error\ncategory: bad_argument\n\n${k} must be a plain identifier (${SAFE_ARG}) and not start with "-": ${v}`, true);
