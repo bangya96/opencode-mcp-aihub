@@ -45,7 +45,7 @@ current AI Hub integration, expand an alias as:
 
 `<alias>` -> `ai-hub/<alias>`
 
-Example: `cx/gpt-5.6-sol` -> `ai-hub/cx/gpt-5.6-sol`.
+Example: `cx/gpt-6.1-sol` -> `ai-hub/cx/gpt-6.1-sol`.
 
 If the actual tool schema or current catalogue requires a different ID format,
 follow the actual contract instead of forcing this prefix.
@@ -55,19 +55,19 @@ follow the actual contract instead of forcing this prefix.
 Use for multi-file implementation, ambiguous requirements, subtle bugs,
 architecture-sensitive work, complex logic, and high-correctness tasks.
 
-1. `cx/gpt-5.6-sol`
+1. `cx/gpt-6.1-sol`
 2. `cx/gpt-6-astra`
 3. `kimi-k3`
 4. `glm-5.3`
 5. `deepseek-v4-pro[1m]`
-6. `ag/gemini-3.1-pro-high`
+6. `ag/claude-opus-4-6-thinking`
 
 ### Medium tier
 
 Use for well-scoped features, fixes that follow established patterns,
 moderate refactors, and ordinary implementation work.
 
-1. `cx/gpt-5.6-terra`
+1. `cx/gpt-6.1-terra`
 2. `glm-5`
 3. `mimo-v2.6-pro`
 4. `glm-5.2`
@@ -81,12 +81,12 @@ Use for simple lookups, mechanical edits, small boilerplate tasks, targeted
 searches, and low-risk changes.
 
 1. `ag/gemini-3.8-flash-high`
-2. `cx/gpt-5.6-luna`
+2. `cx/gpt-6-luna`
 3. `mimo-v2.6-flash`
 4. `deepseek-v4.1-flash`
 5. `minimax-m3`
 6. `ag/gemini-3.8-flash-medium`
-7. `ag/gemini-3-flash`
+7. `ag/gemini-3.8-flash-low`
 
 Do not use image-generation or embedding aliases as delegation fallbacks.
 
