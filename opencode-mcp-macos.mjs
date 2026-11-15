@@ -55,6 +55,17 @@ const CATALOGUE_TTL_MS = 5 * 60_000;
 const KILL_GRACE_MS = 5_000;
 const DEBUG = process.env.OPENCODE_MCP_DEBUG === '1';
 
+// allow_edits=false must not depend on the user's opencode config: by default
+// opencode's build agent writes files and runs shell commands without asking.
+// Denying both removes those tools for the run (read, search and fetch remain).
+const READ_ONLY_PERMISSION = JSON.stringify({ edit: 'deny', bash: 'deny' });
+
+// Option values reach opencode as separate argv entries, so a value starting
+// with "-" would be parsed as a flag (a variant of "--auto" would switch on
+// auto-approve). Accept plain identifiers only.
+const SAFE_ARG = /^[\w.:\/@+\[\]][\w.:\/@+\[\]-]*$/;
+function isSafeArg(v) { return typeof v === 'string' && SAFE_ARG.test(v); }
+
 function debug(...a) {
   if (DEBUG) process.stderr.write(`[opencode-mcp] ${a.join(' ')}\n`);
 }
@@ -65,7 +76,8 @@ const TOOLS = [
     description:
       'Ask opencode (a separate coding agent run via AI Hub) to answer a question, review code, ' +
       'investigate a codebase, or implement changes. Read-only by default: it can read and search ' +
-      'files but not modify them; set allow_edits to let it change files. Every call is a fresh ' +
+      'files, but its edit and shell tools are disabled; set allow_edits to let it change files ' +
+      'and run commands. Every call is a fresh ' +
       'session with no memory of this conversation. The model is validated against the configured ' +
       'catalogue before running; on availability errors (rate limit, quota, overloaded, 5xx, model ' +
       'unavailable) it automatically tries fallback_models in order. Task-level failures (bad code, ' +
@@ -102,7 +114,8 @@ const TOOLS = [
           type: 'boolean',
           description:
             'Auto-approve file modifications so opencode can write code (passes --auto). Default ' +
-            'false (read-only). Only set true when the caller explicitly asked opencode to make ' +
+            'false: read-only, enforced by denying the edit and bash tools for the run. Only set true ' +
+            'when the caller explicitly asked opencode to make ' +
             'changes. Refused if another editing run is already in flight in the same cwd.',
         },
         timeout_ms: {
@@ -279,7 +292,7 @@ function runOnce({ prompt, cwd, model, allowEdits, timeoutMs, variant, sessionId
   return new Promise((resolve) => {
     const args = ['run', '-m', model];
     if (allowEdits) args.push('--auto');
-    if (cwd) args.push('--dir', cwd);
+    if (cwd) args.push(`--dir=${cwd}`); // one argv entry, so a path can never be read as a flag
     if (variant) args.push('--variant', variant);
     if (sessionId) args.push('--session', sessionId);
     args.push('--title', title);
@@ -291,6 +304,7 @@ function runOnce({ prompt, cwd, model, allowEdits, timeoutMs, variant, sessionId
       child = spawn(resolveBin(), args, {
         cwd: cwd || process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: allowEdits ? process.env : { ...process.env, OPENCODE_PERMISSION: READ_ONLY_PERMISSION },
         detached: !IS_WIN, // own process group on POSIX (see killGroup); on Windows this would pop a console
         windowsHide: true,
       });
@@ -367,6 +381,11 @@ async function runWithFallback(a) {
   // A title starting with "-" would be parsed by opencode as a flag.
   const rawTitle = (typeof a.title === 'string' && a.title.trim()) || prompt.split('\n').find((l) => l.trim()) || '';
   const title = rawTitle.trim().replace(/^[-\s]+/, '').slice(0, 80) || 'opencode-mcp';
+  for (const [k, v] of [['variant', variant], ['session_id', sessionId]]) {
+    if (v !== undefined && !isSafeArg(v)) {
+      return toolText(`status: error\ncategory: bad_argument\n\n${k} must be a plain identifier (${SAFE_ARG}) and not start with "-": ${v}`, true);
+    }
+  }
 
   if (cwd) {
     let st = null;
@@ -390,13 +409,20 @@ async function runWithFallback(a) {
   }
 
   const requested = [typeof a.model === 'string' && a.model ? a.model : DEFAULT_MODEL];
+  if (!isSafeArg(requested[0])) {
+    return toolText(`status: error\ncategory: bad_argument\n\nmodel must be a plain provider/model id (${SAFE_ARG}) and not start with "-": ${requested[0]}`, true);
+  }
+  const notes = [];
   if (Array.isArray(a.fallback_models)) {
-    for (const m of a.fallback_models) if (typeof m === 'string' && m) requested.push(m);
+    for (const m of a.fallback_models) {
+      if (typeof m !== 'string' || !m) continue;
+      if (isSafeArg(m)) requested.push(m);
+      else notes.push(`skipped (invalid id): ${m}`);
+    }
   }
   const candidates = [...new Set(requested)];
 
   const catalogue = await readCatalogue();
-  const notes = [];
   let plan = candidates;
   if (catalogue) {
     const missing = candidates.filter((m) => !catalogue.includes(m));
