@@ -9,7 +9,8 @@ The repo has two parts:
 
 | Path | What it is |
 |---|---|
-| `opencode-mcp.mjs` | The MCP server. One file, Node 18+, no `npm install`. Runs on macOS, Linux and Windows. |
+| `opencode-mcp-macos.mjs` | The MCP server for macOS and Linux. One file, Node 18+, no `npm install`. |
+| `opencode-mcp-windows.mjs` | The MCP server for Windows. Same tools and behaviour, same setup. |
 | `skills/opencode/SKILL.md` | An agent skill that tells the host agent *when* and *how* to delegate. It covers the three levels (High, Medium, Low) that match a model to the task's difficulty, the fallback rules, the handoff prompt template, and how to verify the worker's changes. |
 
 ## ⭐ Three levels: High, Medium, Low
@@ -175,13 +176,16 @@ Copy the server into your Claude folder:
 ```bash
 # macOS / Linux
 mkdir -p ~/.claude/mcp
-cp opencode-mcp-aihub/opencode-mcp.mjs ~/.claude/mcp/
+cp opencode-mcp-aihub/opencode-mcp-macos.mjs ~/.claude/mcp/opencode-mcp.mjs
 ```
 ```powershell
 # Windows (PowerShell)
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\mcp" | Out-Null
-Copy-Item opencode-mcp-aihub\opencode-mcp.mjs "$env:USERPROFILE\.claude\mcp\"
+Copy-Item opencode-mcp-aihub\opencode-mcp-windows.mjs "$env:USERPROFILE\.claude\mcp\opencode-mcp.mjs"
 ```
+
+Pick the file for your OS. Both are installed under the same name, `opencode-mcp.mjs`,
+so the registration below is identical, and updating means copying the new file over the old one.
 
 Register it at **user scope**, which makes it available in every project:
 
@@ -240,12 +244,12 @@ Codex CLI reads MCP servers from `~/.codex/config.toml` (Windows: `%USERPROFILE%
 ```bash
 # macOS / Linux
 mkdir -p ~/.codex/mcp
-cp opencode-mcp-aihub/opencode-mcp.mjs ~/.codex/mcp/
+cp opencode-mcp-aihub/opencode-mcp-macos.mjs ~/.codex/mcp/opencode-mcp.mjs
 ```
 ```powershell
 # Windows
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\mcp" | Out-Null
-Copy-Item opencode-mcp-aihub\opencode-mcp.mjs "$env:USERPROFILE\.codex\mcp\"
+Copy-Item opencode-mcp-aihub\opencode-mcp-windows.mjs "$env:USERPROFILE\.codex\mcp\opencode-mcp.mjs"
 ```
 
 Register it with the CLI:
@@ -352,7 +356,7 @@ written without the `ai-hub/` prefix, which the skill adds when calling.
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"opencode_models","arguments":{"provider":"ai-hub"}}}' \
-  | node opencode-mcp.mjs
+  | node opencode-mcp-macos.mjs
 ```
 
 ## License
