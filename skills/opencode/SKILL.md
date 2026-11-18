@@ -60,7 +60,8 @@ architecture-sensitive work, complex logic, and high-correctness tasks.
 3. `kimi-k3`
 4. `glm-5.3`
 5. `deepseek-v4-pro[1m]`
-6. `ag/claude-opus-4-6-thinking`
+6. `ag/claude-opus-5-5`
+7. `ag/gemini-4-argon-high`
 
 ### Medium tier
 
@@ -72,7 +73,7 @@ moderate refactors, and ordinary implementation work.
 3. `mimo-v2.6-pro`
 4. `glm-5.2`
 5. `kimi-k2.6`
-6. `ag/claude-sonnet-4-6-thinking`
+6. `ag/claude-sonnet-5-5`
 7. `hy4-preview`
 
 ### Low tier
@@ -87,6 +88,7 @@ searches, and low-risk changes.
 5. `minimax-m3`
 6. `ag/gemini-3.8-flash-medium`
 7. `ag/gemini-3.8-flash-low`
+8. `ag/gpt-oss-120b-medium`
 
 Do not use image-generation or embedding aliases as delegation fallbacks.
 
