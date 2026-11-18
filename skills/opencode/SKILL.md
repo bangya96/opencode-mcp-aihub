@@ -62,6 +62,9 @@ architecture-sensitive work, complex logic, and high-correctness tasks.
 5. `deepseek-v4-pro[1m]`
 6. `ag/claude-opus-5-5`
 7. `ag/gemini-4-argon-high`
+8. `ag/claude-opus-5-5-high`
+9. `ag/gemini-4-hydrogen-xhigh`
+10. `ag/gemini-4-hydrogen-tiered-xhigh`
 
 ### Medium tier
 
@@ -75,6 +78,15 @@ moderate refactors, and ordinary implementation work.
 5. `kimi-k2.6`
 6. `ag/claude-sonnet-5-5`
 7. `hy4-preview`
+8. `ag/claude-sonnet-5-5-high`
+9. `ag/claude-opus-5-5-medium`
+10. `ag/claude-sonnet-5-5-medium`
+11. `ag/gemini-4-argon-medium`
+12. `ag/gemini-4-hydrogen-high`
+13. `ag/gemini-4-hydrogen-tiered-high`
+14. `ag/gemini-4-hydrogen-medium`
+15. `ag/gemini-4-hydrogen-sonar`
+16. `ag/gemini-3.8-flash-tiered`
 
 ### Low tier
 
@@ -89,6 +101,14 @@ searches, and low-risk changes.
 6. `ag/gemini-3.8-flash-medium`
 7. `ag/gemini-3.8-flash-low`
 8. `ag/gpt-oss-120b-medium`
+9. `ag/gemini-3.8-flash`
+10. `ag/claude-opus-5-5-low`
+11. `ag/claude-sonnet-5-5-low`
+12. `ag/gemini-4-argon-low`
+13. `ag/gemini-4-hydrogen-low`
+14. `ag/gemini-3-flash`
+15. `ag/gemini-3.5-flash-lite`
+16. `ag/gemini-3.1-flash-lite`
 
 Do not use image-generation or embedding aliases as delegation fallbacks.
 

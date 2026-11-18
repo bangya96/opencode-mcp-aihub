@@ -22,9 +22,9 @@ level's list.
 
 | Level | Used for | Model pool (tried in order) |
 |---|---|---|
-| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-6.1-sol` → `cx/gpt-6-astra` → `kimi-k3` → `glm-5.3` → `deepseek-v4-pro[1m]` → `ag/claude-opus-5-5` → `ag/gemini-4-argon-high` |
-| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-6.1-terra` → `glm-5` → `mimo-v2.6-pro` → `glm-5.2` → `kimi-k2.6` → `ag/claude-sonnet-5-5` → `hy4-preview` |
-| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-6-luna` → `mimo-v2.6-flash` → `deepseek-v4.1-flash` → `minimax-m3` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3.8-flash-low` → `ag/gpt-oss-120b-medium` |
+| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-6.1-sol` → `cx/gpt-6-astra` → `kimi-k3` → `glm-5.3` → `deepseek-v4-pro[1m]` → `ag/claude-opus-5-5` → `ag/gemini-4-argon-high` → `ag/claude-opus-5-5-high` → `ag/gemini-4-hydrogen-xhigh` → `ag/gemini-4-hydrogen-tiered-xhigh` |
+| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-6.1-terra` → `glm-5` → `mimo-v2.6-pro` → `glm-5.2` → `kimi-k2.6` → `ag/claude-sonnet-5-5` → `hy4-preview` → `ag/claude-sonnet-5-5-high` → `ag/claude-opus-5-5-medium` → `ag/claude-sonnet-5-5-medium` → `ag/gemini-4-argon-medium` → `ag/gemini-4-hydrogen-high` → `ag/gemini-4-hydrogen-tiered-high` → `ag/gemini-4-hydrogen-medium` → `ag/gemini-4-hydrogen-sonar` → `ag/gemini-3.8-flash-tiered` |
+| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-6-luna` → `mimo-v2.6-flash` → `deepseek-v4.1-flash` → `minimax-m3` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3.8-flash-low` → `ag/gpt-oss-120b-medium` → `ag/gemini-3.8-flash` → `ag/claude-opus-5-5-low` → `ag/claude-sonnet-5-5-low` → `ag/gemini-4-argon-low` → `ag/gemini-4-hydrogen-low` → `ag/gemini-3-flash` → `ag/gemini-3.5-flash-lite` → `ag/gemini-3.1-flash-lite` |
 
 How the choice is made:
 
@@ -132,7 +132,27 @@ Examples:
            "minimax-m3": { "name": "minimax-m3 (via AI Hub)" },
            "ag/gemini-3.8-flash-medium": { "name": "ag/gemini-3.8-flash-medium (via AI Hub)" },
            "ag/gemini-3.8-flash-low": { "name": "ag/gemini-3.8-flash-low (via AI Hub)" },
-           "ag/gpt-oss-120b-medium": { "name": "ag/gpt-oss-120b-medium (via AI Hub)" }
+           "ag/gpt-oss-120b-medium": { "name": "ag/gpt-oss-120b-medium (via AI Hub)" },
+           "ag/claude-opus-5-5-high": { "name": "ag/claude-opus-5-5-high (via AI Hub)" },
+           "ag/gemini-4-hydrogen-xhigh": { "name": "ag/gemini-4-hydrogen-xhigh (via AI Hub)" },
+           "ag/gemini-4-hydrogen-tiered-xhigh": { "name": "ag/gemini-4-hydrogen-tiered-xhigh (via AI Hub)" },
+           "ag/claude-sonnet-5-5-high": { "name": "ag/claude-sonnet-5-5-high (via AI Hub)" },
+           "ag/claude-opus-5-5-medium": { "name": "ag/claude-opus-5-5-medium (via AI Hub)" },
+           "ag/claude-sonnet-5-5-medium": { "name": "ag/claude-sonnet-5-5-medium (via AI Hub)" },
+           "ag/gemini-4-argon-medium": { "name": "ag/gemini-4-argon-medium (via AI Hub)" },
+           "ag/gemini-4-hydrogen-high": { "name": "ag/gemini-4-hydrogen-high (via AI Hub)" },
+           "ag/gemini-4-hydrogen-tiered-high": { "name": "ag/gemini-4-hydrogen-tiered-high (via AI Hub)" },
+           "ag/gemini-4-hydrogen-medium": { "name": "ag/gemini-4-hydrogen-medium (via AI Hub)" },
+           "ag/gemini-4-hydrogen-sonar": { "name": "ag/gemini-4-hydrogen-sonar (via AI Hub)" },
+           "ag/gemini-3.8-flash-tiered": { "name": "ag/gemini-3.8-flash-tiered (via AI Hub)" },
+           "ag/gemini-3.8-flash": { "name": "ag/gemini-3.8-flash (via AI Hub)" },
+           "ag/claude-opus-5-5-low": { "name": "ag/claude-opus-5-5-low (via AI Hub)" },
+           "ag/claude-sonnet-5-5-low": { "name": "ag/claude-sonnet-5-5-low (via AI Hub)" },
+           "ag/gemini-4-argon-low": { "name": "ag/gemini-4-argon-low (via AI Hub)" },
+           "ag/gemini-4-hydrogen-low": { "name": "ag/gemini-4-hydrogen-low (via AI Hub)" },
+           "ag/gemini-3-flash": { "name": "ag/gemini-3-flash (via AI Hub)" },
+           "ag/gemini-3.5-flash-lite": { "name": "ag/gemini-3.5-flash-lite (via AI Hub)" },
+           "ag/gemini-3.1-flash-lite": { "name": "ag/gemini-3.1-flash-lite (via AI Hub)" }
          }
        }
      }
