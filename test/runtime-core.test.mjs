@@ -15,7 +15,8 @@ const launch = { file: process.execPath, argsPrefix: [fileURLToPath(new URL('../
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function setup(t) {
   const dir = realpathSync.native(await fs.mkdtemp(join(tmpdir(), 'oc-runtime-')));
-  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  // Detached supervisors may still be releasing their locks when a test ends; retry the removal.
+  t.after(() => fs.rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   const config = { ...loadConfig({}), state_dir: join(dir, 'state'), sync_wait_ms: 10000 };
   const request = { prompt: 'hello', mode: 'ask', cwd: dir, workspace_key: dir, model: 'ai-hub/model-a', fallback_models: [], timeout_ms: 3000 };
   return { dir, config, request, store: createJobStore({ config, launch }) };
