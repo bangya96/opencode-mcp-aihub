@@ -1,0 +1,10 @@
+{
+  "name": "opencode-mcp-aihub",
+  "version": "2.0.0",
+  "description": "Dependency-free MCP server that lets Claude Code delegate work to OpenCode: plan / ask / edit modes, background jobs, model fallback, completion-wake hook.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test" },
+  "license": "MIT",
+  "private": true
+}
