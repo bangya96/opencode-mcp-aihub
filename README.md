@@ -1,17 +1,19 @@
 # opencode-mcp-aihub
 
-A dependency-free stdio MCP server that lets **Claude Code** or **OpenAI Codex CLI**
-delegate work to the [opencode](https://opencode.ai) CLI. It was built for models
-served through [AI Hub](https://ai-hub.my), but it works with any provider that
-opencode is configured for.
+A dependency-free MCP server that lets **Claude Code** or **OpenAI Codex CLI** delegate work to
+the [opencode](https://opencode.ai) CLI. It was built for models served through
+[AI Hub](https://ai-hub.my), but it works with any provider that opencode is configured for.
 
-The repo has two parts:
+**v2** adds three explicit modes (`plan` / `ask` / `edit`), background jobs that survive client
+disconnects, execution-aware model fallback, change detection, a Claude Code completion-wake hook and
+a `doctor` command. It runs from a clone (`node opencode-mcp.mjs`) on macOS, Linux and Windows, with
+no `npm install` and no build step. The v1 single-file servers are still here and unchanged.
 
 | Path | What it is |
 |---|---|
-| `opencode-mcp-macos.mjs` | The MCP server for macOS and Linux. One file, Node 18+, no `npm install`. |
-| `opencode-mcp-windows.mjs` | The MCP server for Windows. Same tools and behaviour, same setup. |
-| `skills/opencode/SKILL.md` | An agent skill that tells the host agent *when* and *how* to delegate. It covers the three levels (High, Medium, Low) that match a model to the task's difficulty, the fallback rules, the handoff prompt template, and how to verify the worker's changes. |
+| `opencode-mcp.mjs` + `lib/` | **v2** server for macOS, Linux and Windows. Node 18+, no dependencies. |
+| `skills/opencode/SKILL.md` | Agent skill: *when* and *how* to delegate. It covers the three levels (High, Medium, Low) that match a model to the task's difficulty, the modes, the plan-first workflow, fallback rules, the handoff prompt template, and how to verify the worker's changes. |
+| `opencode-mcp-macos.mjs`, `opencode-mcp-windows.mjs` | **v1** single-file servers (frozen). Existing copies keep working; see [Migrating from v1](#migrating-from-v1). |
 
 ## ⭐ Three levels: High, Medium, Low
 
@@ -22,9 +24,9 @@ level's list.
 
 | Level | Used for | Model pool (tried in order) |
 |---|---|---|
-| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-6.1-sol` → `cx/gpt-6-astra` → `kimi-k3` → `glm-5.3` → `deepseek-v4-pro[1m]` → `ag/claude-opus-5-5` → `ag/gemini-4-argon-high` → `ag/claude-opus-5-5-high` → `ag/gemini-4-hydrogen-xhigh` → `ag/gemini-4-hydrogen-tiered-xhigh` |
-| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-6.1-terra` → `glm-5` → `mimo-v2.6-pro` → `glm-5.2` → `kimi-k2.6` → `ag/claude-sonnet-5-5` → `hy4-preview` → `ag/claude-sonnet-5-5-high` → `ag/claude-opus-5-5-medium` → `ag/claude-sonnet-5-5-medium` → `ag/gemini-4-argon-medium` → `ag/gemini-4-hydrogen-high` → `ag/gemini-4-hydrogen-tiered-high` → `ag/gemini-4-hydrogen-medium` → `ag/gemini-4-hydrogen-sonar` → `ag/gemini-3.8-flash-tiered` |
-| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `ag/gemini-3.8-flash-high` → `cx/gpt-6-luna` → `mimo-v2.6-flash` → `deepseek-v4.1-flash` → `minimax-m3` → `ag/gemini-3.8-flash-medium` → `ag/gemini-3.8-flash-low` → `ag/gpt-oss-120b-medium` → `ag/gemini-3.8-flash` → `ag/claude-opus-5-5-low` → `ag/claude-sonnet-5-5-low` → `ag/gemini-4-argon-low` → `ag/gemini-4-hydrogen-low` → `ag/gemini-3-flash` → `ag/gemini-3.5-flash-lite` → `ag/gemini-3.1-flash-lite` |
+| 🔴 **High** | Changes across several files, unclear requirements, subtle bugs, architecture decisions, complex logic, work where correctness really matters | `cx/gpt-6.1-sol` → `cx/gpt-6-astra` → `kimi-k3` → `glm-5.3` → `deepseek-v4-pro[1m]` |
+| 🟡 **Medium** | Well-scoped features, fixes that follow an existing pattern, moderate refactors, ordinary implementation work | `cx/gpt-6.1-terra` → `glm-5` → `mimo-v2.6-pro` → `glm-5.2` → `kimi-k2.6` → `hy4-preview` |
+| 🟢 **Low** | Simple lookups, mechanical edits, small boilerplate, targeted searches, low-risk changes | `cx/gpt-6-luna` → `mimo-v2.6-flash` → `deepseek-v4.1-flash` → `minimax-m3` |
 
 How the choice is made:
 
@@ -38,7 +40,8 @@ How the choice is made:
    MCP server does this itself through `fallback_models`.
 4. **Fallback only covers availability.** If the task itself fails, for example the code has
    a bug or a file is missing, the agent does not switch models, because a different model
-   would not fix that.
+   would not fix that. In `edit` mode the server also stops falling back once the failed attempt
+   has used a tool, because it may already have changed files.
 
 Examples:
 
@@ -56,15 +59,49 @@ Examples:
 
 | Tool | Purpose |
 |---|---|
-| `opencode_ask` | Runs `opencode run` with a self-contained prompt. It is read-only by default, and `allow_edits: true` lets opencode change files. |
-| `opencode_models` | Lists the models opencode currently has configured, for example `ai-hub/cx/gpt-6.1-sol`. |
-| `opencode_status` | Lists runs that are still in flight. Check it after a timeout, before starting another editing run. |
+| `opencode_run` | Start a job in the background; returns `job_id` and the opencode `session_id`. |
+| `opencode_run_sync` | Start and wait inline up to about 90 s; returns the result or a running `job_id`. |
+| `opencode_wait` | Block until a job finishes (up to about 90 s per call). |
+| `opencode_status` | With `job_id`: that job's state and result. Without: jobs still in flight (`include_completed` for recent ones). |
+| `opencode_cancel` | Cancel a job and kill its process tree. |
+| `opencode_ask` | The v1 blocking call, unchanged: read-only by default, `allow_edits: true` to change files, status header output. |
+| `opencode_models` | The models opencode has configured, for example `ai-hub/cx/gpt-6.1-sol`. |
 
-`opencode_ask` behaves as follows:
+### Modes
 
-- **Model validation.** It checks the model against `opencode models` before running. A model that isn't configured fails in about a second with the list of valid ids, instead of an opaque "Unexpected server error".
-- **Automatic fallback.** `fallback_models: [...]` is tried in order, but only on availability errors: rate limit / 429, quota or usage limit, overloaded, 5xx or bad gateway, and model unavailable. Task errors such as failing code or a missing file are never retried on another model.
-- **Status header.** Every reply starts with a header like this:
+| Mode | What opencode may do | How |
+|---|---|---|
+| `ask` (default) | Read, search and fetch | Dedicated `opencode-mcp-readonly` agent: write, edit, patch, shell and subagent tools removed, edit/bash denied, the project's opencode config ignored |
+| `plan` | Same as `ask`, and it answers with an implementation plan | Same agent plus a planning preamble. Returns `session_id` |
+| `edit` | Change files and run commands | `--auto` |
+
+`ask` and `plan` are enforced tool restrictions, not an OS sandbox: MCP servers or plugins you have
+configured globally in opencode are not covered. opencode's built-in `plan` agent is not used because
+it can still run shell commands.
+
+**Plan-first workflow:** run `plan`, review the plan with the user, then `opencode_run` with
+`mode: "edit"` and the plan's `session_id`. opencode continues the same session and implements it.
+
+### Behaviour
+
+- **Jobs survive disconnects.** Each job runs under a detached supervisor and writes its state to
+  disk, so restarting Claude Code or losing the connection does not lose the result. Cancelling a
+  wait does not cancel the job; `opencode_cancel` does.
+- **Model validation.** The model and fallbacks are checked against `opencode models` first; models
+  that are not configured are skipped with a note.
+- **Execution-aware fallback.** `fallback_models` are tried in order on availability errors only,
+  classified from opencode's structured `error` events (`statusCode`, `isRetryable`) and then stderr,
+  never from the answer text or tool output. In `edit` mode fallback stops once the failed attempt
+  has used a tool.
+- **Change detection.** Every job snapshots the git working tree before and after and reports the
+  files that changed during the job (or `null` when that cannot be checked).
+- **Locks.** One `edit` job per git repository and one job per opencode session at a time. `ask` and
+  `plan` jobs may run side by side.
+- **Idempotency.** `idempotency_key` makes a retried `opencode_run` return the existing job.
+- **Arguments can't become flags.** Model ids, `variant` and `session_id` must be plain ids that do not
+  start with `-`, and every option is a single `--name=value` argument. Prompts go over stdin.
+- **No default model.** Pass `model`, or set `OPENCODE_MCP_MODEL`.
+- **Status header.** `opencode_ask` replies keep the v1 header:
   ```
   status: ok
   category: ok
@@ -72,12 +109,6 @@ Examples:
   attempts: ai-hub/cx/gpt-6.1-sol → ok [42.1s]
   elapsed: 42.1s
   ```
-  A 429 shows up as `→ rate_limit (retry after 489s)`.
-- **Timeouts.** A timeout kills the whole process tree. That is the process group on POSIX and `taskkill /T` on Windows. Any partial output is returned.
-- **One editing worker per folder.** A second `allow_edits` run in the same `cwd` is refused while the first is still running.
-- **Read-only is enforced.** Without `allow_edits`, the run uses a dedicated `opencode-mcp-readonly` agent with no write, edit, shell or subagent tools; edit and bash are also denied globally, and the project's own opencode config is ignored (`OPENCODE_DISABLE_PROJECT_CONFIG`), so a repo cannot switch them back on. It can still read, search and fetch URLs. (Plain `opencode run` without `--auto` is *not* read-only: its default agent writes files and runs commands.) Tested on opencode 1.18.30.
-- **Arguments can't become flags.** `model`, `fallback_models`, `variant` and `session_id` must be plain ids that don't start with `-`, and every option is passed as a single `--name=value` argument.
-- **Other options.** `variant` passes reasoning effort, for example `high` or `max`. `session_id` continues an earlier session and `title` names it. Output is capped at 120k characters, keeping the head and tail.
 
 ---
 
@@ -116,43 +147,16 @@ Examples:
            "kimi-k3": { "name": "kimi-k3 (via AI Hub)" },
            "glm-5.3": { "name": "glm-5.3 (via AI Hub)" },
            "deepseek-v4-pro[1m]": { "name": "deepseek-v4-pro[1m] (via AI Hub)" },
-           "ag/claude-opus-5-5": { "name": "ag/claude-opus-5-5 (via AI Hub)" },
-           "ag/gemini-4-argon-high": { "name": "ag/gemini-4-argon-high (via AI Hub)" },
            "cx/gpt-6.1-terra": { "name": "cx/gpt-6.1-terra (via AI Hub)" },
            "glm-5": { "name": "glm-5 (via AI Hub)" },
            "mimo-v2.6-pro": { "name": "mimo-v2.6-pro (via AI Hub)" },
            "glm-5.2": { "name": "glm-5.2 (via AI Hub)" },
            "kimi-k2.6": { "name": "kimi-k2.6 (via AI Hub)" },
-           "ag/claude-sonnet-5-5": { "name": "ag/claude-sonnet-5-5 (via AI Hub)" },
            "hy4-preview": { "name": "hy4-preview (via AI Hub)" },
-           "ag/gemini-3.8-flash-high": { "name": "ag/gemini-3.8-flash-high (via AI Hub)" },
            "cx/gpt-6-luna": { "name": "cx/gpt-6-luna (via AI Hub)" },
            "mimo-v2.6-flash": { "name": "mimo-v2.6-flash (via AI Hub)" },
            "deepseek-v4.1-flash": { "name": "deepseek-v4.1-flash (via AI Hub)" },
-           "minimax-m3": { "name": "minimax-m3 (via AI Hub)" },
-           "ag/gemini-3.8-flash-medium": { "name": "ag/gemini-3.8-flash-medium (via AI Hub)" },
-           "ag/gemini-3.8-flash-low": { "name": "ag/gemini-3.8-flash-low (via AI Hub)" },
-           "ag/gpt-oss-120b-medium": { "name": "ag/gpt-oss-120b-medium (via AI Hub)" },
-           "ag/claude-opus-5-5-high": { "name": "ag/claude-opus-5-5-high (via AI Hub)" },
-           "ag/gemini-4-hydrogen-xhigh": { "name": "ag/gemini-4-hydrogen-xhigh (via AI Hub)" },
-           "ag/gemini-4-hydrogen-tiered-xhigh": { "name": "ag/gemini-4-hydrogen-tiered-xhigh (via AI Hub)" },
-           "ag/claude-sonnet-5-5-high": { "name": "ag/claude-sonnet-5-5-high (via AI Hub)" },
-           "ag/claude-opus-5-5-medium": { "name": "ag/claude-opus-5-5-medium (via AI Hub)" },
-           "ag/claude-sonnet-5-5-medium": { "name": "ag/claude-sonnet-5-5-medium (via AI Hub)" },
-           "ag/gemini-4-argon-medium": { "name": "ag/gemini-4-argon-medium (via AI Hub)" },
-           "ag/gemini-4-hydrogen-high": { "name": "ag/gemini-4-hydrogen-high (via AI Hub)" },
-           "ag/gemini-4-hydrogen-tiered-high": { "name": "ag/gemini-4-hydrogen-tiered-high (via AI Hub)" },
-           "ag/gemini-4-hydrogen-medium": { "name": "ag/gemini-4-hydrogen-medium (via AI Hub)" },
-           "ag/gemini-4-hydrogen-sonar": { "name": "ag/gemini-4-hydrogen-sonar (via AI Hub)" },
-           "ag/gemini-3.8-flash-tiered": { "name": "ag/gemini-3.8-flash-tiered (via AI Hub)" },
-           "ag/gemini-3.8-flash": { "name": "ag/gemini-3.8-flash (via AI Hub)" },
-           "ag/claude-opus-5-5-low": { "name": "ag/claude-opus-5-5-low (via AI Hub)" },
-           "ag/claude-sonnet-5-5-low": { "name": "ag/claude-sonnet-5-5-low (via AI Hub)" },
-           "ag/gemini-4-argon-low": { "name": "ag/gemini-4-argon-low (via AI Hub)" },
-           "ag/gemini-4-hydrogen-low": { "name": "ag/gemini-4-hydrogen-low (via AI Hub)" },
-           "ag/gemini-3-flash": { "name": "ag/gemini-3-flash (via AI Hub)" },
-           "ag/gemini-3.5-flash-lite": { "name": "ag/gemini-3.5-flash-lite (via AI Hub)" },
-           "ag/gemini-3.1-flash-lite": { "name": "ag/gemini-3.1-flash-lite (via AI Hub)" }
+           "minimax-m3": { "name": "minimax-m3 (via AI Hub)" }
          }
        }
      }
@@ -161,7 +165,7 @@ Examples:
 
    The `models` block above lists every alias in the skill's High / Medium / Low pools
    (`skills/opencode/SKILL.md`). A pool alias missing from this block cannot be used:
-   the server rejects it with `model_not_configured`.
+   the server skips it (`model_unavailable` when no candidate is left).
 
    > **If you are an AI agent installing this for a user:** do not stop at copying the
    > snippet. Open the user's existing `opencode.jsonc`, read the `models` block of the
@@ -176,7 +180,7 @@ Examples:
 
    ```bash
    opencode models | grep ai-hub        # Windows: opencode models | findstr ai-hub
-   opencode run -m ai-hub/ag/gemini-3.8-flash-high "Reply with exactly the word: pong"
+   opencode run -m ai-hub/deepseek-v4.1-flash "Reply with exactly the word: pong"
    ```
 
    Use the piped form above: opencode 2.x no longer accepts a provider argument, so
@@ -195,67 +199,71 @@ Examples:
 
 ### 2a. The MCP server
 
-Copy the server into your Claude folder:
+Clone the repo somewhere permanent and check the setup:
+
+```bash
+git clone https://github.com/bangya96/opencode-mcp-aihub.git ~/opencode-mcp-aihub
+node ~/opencode-mcp-aihub/opencode-mcp.mjs doctor
+```
+
+Register it at **user scope**, which makes it available in every project. Set
+`OPENCODE_MCP_MODEL` if you want a default model; otherwise every call must pass `model`.
 
 ```bash
 # macOS / Linux
-mkdir -p ~/.claude/mcp
-cp opencode-mcp-aihub/opencode-mcp-macos.mjs ~/.claude/mcp/opencode-mcp.mjs
-```
-```powershell
-# Windows (PowerShell)
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\mcp" | Out-Null
-Copy-Item opencode-mcp-aihub\opencode-mcp-windows.mjs "$env:USERPROFILE\.claude\mcp\opencode-mcp.mjs"
-```
-
-Pick the file for your OS. Both are installed under the same name, `opencode-mcp.mjs`,
-so the registration below is identical, and updating means copying the new file over the old one.
-
-Register it at **user scope**, which makes it available in every project:
-
-```bash
-# macOS / Linux
-claude mcp add --scope user opencode -- node "$HOME/.claude/mcp/opencode-mcp.mjs"
+claude mcp add --scope user opencode -- node "$HOME/opencode-mcp-aihub/opencode-mcp.mjs"
 ```
 ```powershell
 # Windows
-claude mcp add --scope user opencode -- node "$env:USERPROFILE\.claude\mcp\opencode-mcp.mjs"
+claude mcp add --scope user opencode -- node "$env:USERPROFILE\opencode-mcp-aihub\opencode-mcp.mjs"
 ```
 
-You can also edit `~/.claude.json` by hand and add this under `"mcpServers"`:
-
-```json
-"opencode": {
-  "type": "stdio",
-  "command": "node",
-  "args": ["/Users/<you>/.claude/mcp/opencode-mcp.mjs"],
-  "env": {}
-}
-```
-
-To share the server with a team through a repo, use `--scope project` instead. That writes a
-`.mcp.json` at the project root.
+Updating is `git pull` in the clone, then reconnecting the server (`/mcp`).
 
 ### 2b. The skill
 
 ```bash
 # macOS / Linux
 mkdir -p ~/.claude/skills
-cp -R opencode-mcp-aihub/skills/opencode ~/.claude/skills/
+cp -R ~/opencode-mcp-aihub/skills/opencode ~/.claude/skills/
 ```
 ```powershell
 # Windows
-Copy-Item -Recurse opencode-mcp-aihub\skills\opencode "$env:USERPROFILE\.claude\skills\"
+Copy-Item -Recurse "$env:USERPROFILE\opencode-mcp-aihub\skills\opencode" "$env:USERPROFILE\.claude\skills\"
 ```
 
-### 2c. Verify
+### 2c. Optional: completion-wake hook
+
+Claude Code does not wake the model when a background job finishes. This hook does: after every
+`opencode_run`, it waits for the job and wakes Claude when it ends, unless the result was already
+read. Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__opencode__opencode_run(_sync)?",
+        "hooks": [
+          { "type": "command", "command": "node /absolute/path/to/opencode-mcp-aihub/opencode-mcp.mjs hook-wait", "asyncRewake": true, "timeout": 3700 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The hook's `timeout` (seconds) must exceed hook-wait's own limit (1 hour by default,
+`--timeout-ms` or `OPENCODE_MCP_HOOK_TIMEOUT_MS`). Hooks run with your shell environment: if you set
+`OPENCODE_MCP_STATE_DIR` for the server, set it for the hook too.
+
+### 2d. Verify
 
 1. Restart Claude Code, or run `/mcp` and reconnect `opencode`.
-2. `/mcp` should list **opencode · connected** with 3 tools.
-3. Ask: *"use opencode to list the ai-hub models"*. Claude should call
-   `mcp__opencode__opencode_models`.
-4. Ask: *"guna opencode (high) untuk review fail X"*. The `opencode` skill should load, and
-   Claude should call `mcp__opencode__opencode_ask` with an explicit `model`.
+2. `/mcp` should list **opencode · connected** with 7 tools.
+3. Ask: *"use opencode to list the ai-hub models"*. Claude should call `opencode_models`.
+4. Ask: *"guna opencode buat plan untuk ..."*. Claude should call `opencode_run` with `mode: "plan"`
+   and an explicit `model`.
 
 ---
 
@@ -266,38 +274,21 @@ Codex CLI reads MCP servers from `~/.codex/config.toml` (Windows: `%USERPROFILE%
 ### 3a. The MCP server
 
 ```bash
-# macOS / Linux
-mkdir -p ~/.codex/mcp
-cp opencode-mcp-aihub/opencode-mcp-macos.mjs ~/.codex/mcp/opencode-mcp.mjs
-```
-```powershell
-# Windows
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\mcp" | Out-Null
-Copy-Item opencode-mcp-aihub\opencode-mcp-windows.mjs "$env:USERPROFILE\.codex\mcp\opencode-mcp.mjs"
+codex mcp add opencode -- node "$HOME/opencode-mcp-aihub/opencode-mcp.mjs"
 ```
 
-Register it with the CLI:
-
-```bash
-codex mcp add opencode -- node "$HOME/.codex/mcp/opencode-mcp.mjs"
-```
-
-You can also add it to `~/.codex/config.toml` by hand:
+Or by hand:
 
 ```toml
 [mcp_servers.opencode]
 command = "node"
-args = ["/Users/<you>/.codex/mcp/opencode-mcp.mjs"]
-# Windows: args = ['C:\Users\<you>\.codex\mcp\opencode-mcp.mjs']
+args = ["/Users/<you>/opencode-mcp-aihub/opencode-mcp.mjs"]
+# Windows: args = ['C:\Users\<you>\opencode-mcp-aihub\opencode-mcp.mjs']
 startup_timeout_sec = 20
-# IMPORTANT: Codex's default tool timeout is short, and opencode runs often take
-# minutes. Set this above the longest timeout_ms you plan to use (default 600s).
+# opencode_ask blocks until opencode finishes, which can take minutes. Keep this above the
+# longest timeout_ms you use, or use opencode_run + opencode_wait, which never block for long.
 tool_timeout_sec = 1200
 ```
-
-> **Set `tool_timeout_sec`.** Without it, Codex abandons long opencode runs while the worker
-> keeps going in the background. That is exactly the overlapping-editor situation the skill
-> warns about.
 
 ### 3b. The skill
 
@@ -306,21 +297,16 @@ Codex loads agent skills (the same `SKILL.md` format) from `~/.codex/skills/`:
 ```bash
 # macOS / Linux
 mkdir -p ~/.codex/skills
-cp -R opencode-mcp-aihub/skills/opencode ~/.codex/skills/
+cp -R ~/opencode-mcp-aihub/skills/opencode ~/.codex/skills/
 ```
 ```powershell
 # Windows
-Copy-Item -Recurse opencode-mcp-aihub\skills\opencode "$env:USERPROFILE\.codex\skills\"
+Copy-Item -Recurse "$env:USERPROFILE\opencode-mcp-aihub\skills\opencode" "$env:USERPROFILE\.codex\skills\"
 ```
 
-The skill is written from Claude's point of view ("Claude is the planner and reviewer…").
-Codex follows it the same way, because the rules are about the host agent, not about Claude
-specifically. In Codex the tool appears as `opencode.opencode_ask`, not
-`mcp__opencode__opencode_ask`. The skill tells the agent to check the exposed tool schema
-first, so it adapts to that name.
-
-If your Codex version does not pick up `~/.codex/skills`, paste the body of `SKILL.md` into
-`~/.codex/AGENTS.md` instead. That file is loaded on every run.
+The skill is written from Claude's point of view; Codex follows it the same way. In Codex the tools
+appear as `opencode.opencode_run` and so on, not `mcp__opencode__...`. If your Codex version does not
+pick up `~/.codex/skills`, paste the body of `SKILL.md` into `~/.codex/AGENTS.md`.
 
 ### 3c. Verify
 
@@ -333,15 +319,20 @@ codex                   # then ask: "use opencode to list the ai-hub models"
 
 ## 4. Configuration (env vars)
 
-Set these in the `env` block (Claude Code) or `env = { ... }` under `[mcp_servers.opencode]`
-(Codex):
+Set these in the `env` block (Claude Code) or `env = { ... }` under `[mcp_servers.opencode]` (Codex):
 
 | Var | Default | Meaning |
 |---|---|---|
-| `OPENCODE_MCP_MODEL` | `ai-hub/ag/gemini-3.8-flash-high` | Model used when a call passes no `model` |
+| `OPENCODE_MCP_MODEL` | none | Model used when a call passes no `model`. Without it, every call must pass one |
 | `OPENCODE_MCP_TIMEOUT_MS` | `600000` | Per-attempt timeout |
-| `OPENCODE_MCP_BIN` | `opencode` | Full path to the opencode binary, if it isn't on `PATH` |
+| `OPENCODE_MCP_BIN` | auto | Full path to the opencode binary, if it isn't found automatically |
 | `OPENCODE_MCP_MAX_OUTPUT` | `120000` | Max characters returned per run |
+| `OPENCODE_MCP_PROMPT_ARGV` | unset | `1` passes the prompt as an argument instead of stdin (old behaviour) |
+| `OPENCODE_MCP_STATE_DIR` | `~/.local/state/opencode-mcp`, Windows `%LOCALAPPDATA%\opencode-mcp` | Job state (kept 24 h) |
+| `OPENCODE_MCP_SYNC_WAIT_MS` | `90000` | Inline wait cap for `opencode_run_sync` / `opencode_wait` |
+| `OPENCODE_MCP_MAX_CONCURRENCY` | `4` | Running jobs per state dir |
+| `OPENCODE_MCP_JOB_TTL_MS` | `86400000` | Finished jobs are deleted after this |
+| `OPENCODE_MCP_HOOK_TIMEOUT_MS` | `3600000` | hook-wait limit |
 | `OPENCODE_MCP_DEBUG` | unset | `1` logs to stderr |
 
 ## 5. Customising the skill's model pools
@@ -356,23 +347,26 @@ written without the `ai-hub/` prefix, which the skill adds when calling.
 
 - `where opencode` usually finds the npm shim `opencode.cmd`. Node can't spawn a `.cmd`
   without a shell, and a shell would mangle multi-line prompts. The server therefore resolves
-  the real `opencode.exe` by itself, from a scoop or choco `.exe` shim or from
-  `node_modules\opencode-ai\bin\opencode.exe` next to the npm shim.
-- If a call returns `category: launch_failed`, set `OPENCODE_MCP_BIN` to the full path of
-  `opencode.exe`.
-- Timeouts kill the process tree with `taskkill /pid <pid> /T /F`.
+  the real `opencode.exe` by itself, from a scoop or choco `.exe` shim or from the npm package.
+- Prompts go over stdin, so there is no command-line length limit.
+- Timeouts and cancellation kill the process tree with `taskkill /pid <pid> /T /F`.
+- `git` for change detection is looked up on absolute `PATH` entries only, never in the project folder.
+- If a call fails with `launch_failed`, set `OPENCODE_MCP_BIN` to the full path of `opencode.exe`.
+- The test suite runs on Windows in CI with a fake opencode.
 
 ## 7. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| `category: model_not_configured` | The model id isn't in `opencode models`. Pick one from the list in the error. |
-| `category: rate_limit` / `quota` | That model's allowance is used up. Pass `fallback_models`, or wait for the `retry after` time. |
-| `category: server_error` | The provider returned a 5xx. Fallback is attempted automatically. |
-| `category: bad_cwd` | `cwd` doesn't exist. Pass an absolute path to an existing folder. |
-| `category: edit_conflict` | Another editing run is active in that folder. Check `opencode_status`. |
-| `category: timeout` | Raise `timeout_ms` (and Codex's `tool_timeout_sec`), or split the task. |
-| Tool list is stale after updating the file | Reconnect the server (`/mcp` in Claude Code), or restart the host. |
+| `model_required` | No `model` and no `OPENCODE_MCP_MODEL`. Pass a model from `opencode_models`. |
+| `model_unavailable` | The model isn't in `opencode models`, or the gateway rejected it. Pick another one. |
+| `rate_limited` / `quota_exhausted` | That model's allowance is used up. Pass `fallback_models`, or wait for the `retry after` time. |
+| `server_error` / `unavailable` | The provider returned a 5xx or could not be reached. Fallback is attempted automatically. |
+| `auth_required` | The provider rejected the API key. Check the opencode config. |
+| `busy_workspace` | Another `edit` job is running in that repository. See `opencode_status`. |
+| `busy_session` | Another job is using that opencode session. |
+| `timeout` | Raise `timeout_ms`, continue the `session_id`, or split the task. |
+| Anything else | Run `node opencode-mcp.mjs doctor`. |
 
 ### Smoke test without any host
 
@@ -380,8 +374,25 @@ written without the `ai-hub/` prefix, which the skill adds when calling.
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"opencode_models","arguments":{"provider":"ai-hub"}}}' \
-  | node opencode-mcp-macos.mjs
+  | node opencode-mcp.mjs
 ```
+
+## Migrating from v1
+
+- v1 (`opencode-mcp-macos.mjs` / `opencode-mcp-windows.mjs`, usually copied to
+  `~/.claude/mcp/opencode-mcp.mjs`) keeps working and is no longer updated.
+- To move to v2: clone the repo, run `doctor`, and point the registration at `opencode-mcp.mjs` in
+  the clone (section 2a). The tool name (`opencode`) and `opencode_ask` / `opencode_models` /
+  `opencode_status` stay compatible.
+- **Breaking:** there is no built-in default model any more (the old default no longer exists on AI
+  Hub). Pass `model` or set `OPENCODE_MCP_MODEL`.
+- `opencode_status` without arguments still lists running work; v2 also accepts `job_id`.
+
+## Credits
+
+The job supervision, idempotency, change detection, completion-wake hook and doctor design come from
+[agycli-mcp](https://github.com/bangya96/agycli-mcp) by the same author, which in turn took ideas from
+[tphakala/agy-mcp](https://github.com/tphakala/agy-mcp).
 
 ## License
 

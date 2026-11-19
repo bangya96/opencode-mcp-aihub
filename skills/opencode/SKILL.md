@@ -1,6 +1,6 @@
 ---
 name: opencode
-description: Delegate implementation, investigation, or code review to OpenCode through mcp__opencode__opencode_ask when the user asks to use OpenCode or explicitly assigns it a task. Triggers include "guna opencode", "suruh opencode", "ask opencode", and "delegate to opencode". Requests mentioning Terra or Gemini trigger this skill when the context clearly refers to the OpenCode worker.
+description: Delegate implementation, investigation, planning or code review to OpenCode through the opencode MCP tools (opencode_run / opencode_wait / opencode_ask) when the user asks to use OpenCode or explicitly assigns it a task. Triggers include "guna opencode", "suruh opencode", "ask opencode", and "delegate to opencode". Requests mentioning Terra or Gemini trigger this skill when the context clearly refers to the OpenCode worker.
 ---
 
 # OpenCode delegation
@@ -8,31 +8,39 @@ description: Delegate implementation, investigation, or code review to OpenCode 
 Claude is the user's discussion partner, planner, and reviewer.
 OpenCode is the delegated implementation or investigation agent.
 
-Use `mcp__opencode__opencode_ask` for delegation. This skill explains how to
-use that tool; it does not create the tool or grant execution permissions.
+Use the opencode MCP tools for delegation. This skill explains how to use them;
+it does not create the tools or grant execution permissions.
 
 ## Session and tool contract
 
-Treat every call as a fresh session without Claude's conversation history.
-OpenCode can inspect project files through its permitted tools, but decisions
-and requirements that exist only in Claude's conversation must be supplied.
+Treat every job as a fresh session without Claude's conversation history, unless
+you continue an earlier opencode session with `session_id`. OpenCode can inspect
+project files through its permitted tools, but decisions and requirements that
+exist only in Claude's conversation must be supplied.
 
-The integration is expected to expose:
+The v2 server exposes:
 
-- `prompt`: required, self-contained task instructions.
-- `allow_edits`: defaults to false; set true for authorized file changes.
-- `cwd`: pass the absolute project root explicitly.
-- `model`: always pass an explicit provider/model ID.
-- `timeout_ms`: expected default 600000 milliseconds.
+- `opencode_run`: start a background job; returns `job_id` and `session_id`.
+- `opencode_run_sync`: start and wait up to ~90 s.
+- `opencode_wait` / `opencode_status` / `opencode_cancel`: collect, inspect or stop a job.
+- `opencode_ask`: the v1 blocking call (`allow_edits` instead of `mode`).
+- `opencode_models`: the configured catalogue.
 
-Check the exposed tool schema before calling. If its parameters or documented
-behavior differ from this skill, use the actual contract and explain any
+Run parameters: `prompt` (self-contained), `mode` (`plan` | `ask` | `edit`),
+`model` (always explicit `provider/model`), `fallback_models`, `cwd` (absolute
+project root), `timeout_ms` (per attempt, default 600000), `session_id`,
+`variant`, `title`, `idempotency_key`.
+
+Check the exposed tool schema before calling. If only `opencode_ask` exists (a
+v1 server), use it with `allow_edits` and the same rules. If parameters or
+behaviour differ from this skill, follow the actual contract and explain any
 material mismatch. Do not invent unsupported parameters.
 
-Do not assume `allow_edits` controls shell commands, network access, or all
-possible side effects. Respect the integration's actual permissions.
+`ask` and `plan` use a read-only agent (edit, shell and subagent tools removed).
+That is a tool restriction, not an OS sandbox: globally configured opencode MCP
+servers or plugins are not covered. `edit` can change files and run commands.
 
-If the tool is unavailable, explain the blocker. Do not silently implement
+If the tools are unavailable, explain the blocker. Do not silently implement
 the delegated task yourself or substitute another integration.
 
 ## Model routing and fallback
@@ -60,11 +68,6 @@ architecture-sensitive work, complex logic, and high-correctness tasks.
 3. `kimi-k3`
 4. `glm-5.3`
 5. `deepseek-v4-pro[1m]`
-6. `ag/claude-opus-5-5`
-7. `ag/gemini-4-argon-high`
-8. `ag/claude-opus-5-5-high`
-9. `ag/gemini-4-hydrogen-xhigh`
-10. `ag/gemini-4-hydrogen-tiered-xhigh`
 
 ### Medium tier
 
@@ -76,39 +79,17 @@ moderate refactors, and ordinary implementation work.
 3. `mimo-v2.6-pro`
 4. `glm-5.2`
 5. `kimi-k2.6`
-6. `ag/claude-sonnet-5-5`
-7. `hy4-preview`
-8. `ag/claude-sonnet-5-5-high`
-9. `ag/claude-opus-5-5-medium`
-10. `ag/claude-sonnet-5-5-medium`
-11. `ag/gemini-4-argon-medium`
-12. `ag/gemini-4-hydrogen-high`
-13. `ag/gemini-4-hydrogen-tiered-high`
-14. `ag/gemini-4-hydrogen-medium`
-15. `ag/gemini-4-hydrogen-sonar`
-16. `ag/gemini-3.8-flash-tiered`
+6. `hy4-preview`
 
 ### Low tier
 
 Use for simple lookups, mechanical edits, small boilerplate tasks, targeted
 searches, and low-risk changes.
 
-1. `ag/gemini-3.8-flash-high`
-2. `cx/gpt-6-luna`
-3. `mimo-v2.6-flash`
-4. `deepseek-v4.1-flash`
-5. `minimax-m3`
-6. `ag/gemini-3.8-flash-medium`
-7. `ag/gemini-3.8-flash-low`
-8. `ag/gpt-oss-120b-medium`
-9. `ag/gemini-3.8-flash`
-10. `ag/claude-opus-5-5-low`
-11. `ag/claude-sonnet-5-5-low`
-12. `ag/gemini-4-argon-low`
-13. `ag/gemini-4-hydrogen-low`
-14. `ag/gemini-3-flash`
-15. `ag/gemini-3.5-flash-lite`
-16. `ag/gemini-3.1-flash-lite`
+1. `cx/gpt-6-luna`
+2. `mimo-v2.6-flash`
+3. `deepseek-v4.1-flash`
+4. `minimax-m3`
 
 Do not use image-generation or embedding aliases as delegation fallbacks.
 
@@ -153,17 +134,21 @@ Stop immediately after the first successful OpenCode response. Do not call
 additional models to compare answers unless the user explicitly asks for
 multiple independent attempts.
 
-### Timeout and uncertain execution
+### Long jobs, timeouts and uncertain execution
 
-A timeout or lost connection does not prove the worker stopped.
+Prefer `opencode_run` for anything that may take more than a minute, then
+`opencode_wait` (repeat while it is running) or wait for the completion-wake
+hook. Jobs keep running if Claude Code restarts or the call is abandoned; find
+them again with `opencode_status`.
 
-For `allow_edits: true`, do not automatically launch a fallback editing worker
-after a timeout or lost connection. First use the integration's supported status
-mechanism or inspect the exact workspace for partial changes. Avoid overlapping
-editing workers.
+A timeout or lost connection does not prove the worker stopped. Before starting
+another `edit` job in the same repository, check `opencode_status` and the
+working tree. The server refuses a second concurrent `edit` job in one
+repository (`busy_workspace`) and a second job on one session (`busy_session`).
 
-For `allow_edits: false`, a fallback attempt is safer, but still avoid repeated
-calls when the integration indicates the original run may still be active.
+In `edit` mode the server stops falling back to the next model once the failed
+attempt has used a tool, because files may already have changed. Inspect
+`git diff` before retrying in that case. For `ask` and `plan`, fallback is safe.
 
 ### Catalogue recovery
 
@@ -188,18 +173,30 @@ check, report the blocker instead of silently doing the delegated task yourself.
 
 ### Consultation, investigation, or review
 
-Use `allow_edits: false`.
+Use `mode: "ask"` (v1: `allow_edits: false`).
 
 Define the question, relevant code, and expected evidence. Request findings
 with file references and a distinction between confirmed facts and hypotheses.
+The result's `changes` field reports files that changed during the job; for an
+`ask` job that should be empty. If it is not, tell the user (someone else may
+have edited at the same time) and do not revert automatically.
 
 For review-only work, a matching `-review` model variant may be used when it is
 present in the current catalogue, but it is optional. The normal tier fallback
 policy still applies if that review variant is unavailable.
 
+### Planning (plan-first workflow)
+
+Use `mode: "plan"` to have OpenCode study the code and propose a plan without
+touching files. Show the plan to the user, summarised with the key steps and
+risks you see. Only after the user approves, call `opencode_run` with
+`mode: "edit"`, the plan job's `session_id`, the same model, and a prompt such as
+"The plan is approved. Implement it now, then verify the change." Add any
+changes the user asked for in that prompt.
+
 ### Implementation or correction
 
-Use `allow_edits: true` only when changes are authorized.
+Use `mode: "edit"` (v1: `allow_edits: true`) only when changes are authorized.
 
 For the user's plan-first workflow, discuss requirements and obtain approval
 before implementation. An explicit instruction to implement an agreed plan
