@@ -1,7 +1,7 @@
 # opencode-mcp-aihub
 
-A dependency-free MCP server that lets **Claude Code** or **OpenAI Codex CLI** delegate work to
-the [opencode](https://opencode.ai) CLI. It was built for models served through
+A dependency-free MCP server that lets **Claude Code**, **OpenAI Codex CLI** or **Hermes Agent**
+delegate work to the [opencode](https://opencode.ai) CLI. It was built for models served through
 [AI Hub](https://ai-hub.my), but it works with any provider that opencode is configured for.
 
 **v2** adds three explicit modes (`plan` / `ask` / `edit`), background jobs that survive client
@@ -53,7 +53,7 @@ Examples:
 | "use opencode **high** to review this file" | 🔴 High (you asked for it) |
 
 > The pools above are the author's AI Hub catalogue. Change them to match your own; see
-> [Customising the skill's model pools](#5-customising-the-skills-model-pools).
+> [Customising the skill's model pools](#6-customising-the-skills-model-pools).
 
 ## What the server provides
 
@@ -112,7 +112,7 @@ it can still run shell commands.
 
 ---
 
-## 1. Prerequisites (both hosts)
+## 1. Prerequisites (every host)
 
 1. **Node.js 18 or newer** on `PATH`.
 2. **opencode** installed and working from a terminal:
@@ -304,7 +304,7 @@ cp -R ~/opencode-mcp-aihub/skills/opencode ~/.codex/skills/
 Copy-Item -Recurse "$env:USERPROFILE\opencode-mcp-aihub\skills\opencode" "$env:USERPROFILE\.codex\skills\"
 ```
 
-The skill is written from Claude's point of view; Codex follows it the same way. In Codex the tools
+The skill is client-neutral. In Codex the tools
 appear as `opencode.opencode_run` and so on, not `mcp__opencode__...`. If your Codex version does not
 pick up `~/.codex/skills`, paste the body of `SKILL.md` into `~/.codex/AGENTS.md`.
 
@@ -317,9 +317,79 @@ codex                   # then ask: "use opencode to list the ai-hub models"
 
 ---
 
-## 4. Configuration (env vars)
+## 4. Install in Hermes Agent
 
-Set these in the `env` block (Claude Code) or `env = { ... }` under `[mcp_servers.opencode]` (Codex):
+[Hermes Agent](https://hermes-agent.nousresearch.com) (Nous Research) uses this server as a normal
+stdio MCP server. It reads MCP servers from `~/.hermes/config.yaml`.
+
+### 4a. The MCP server
+
+```yaml
+mcp_servers:
+  opencode:
+    command: "/usr/local/bin/node"     # absolute path to node: `which node`
+    args: ["/Users/<you>/opencode-mcp-aihub/opencode-mcp.mjs"]
+    timeout: 300                       # per tool call; opencode_run_sync and opencode_wait return within ~90 s
+    env:
+      OPENCODE_MCP_MODEL: "ai-hub/cx/gpt-6.1-terra"   # optional default model
+```
+
+Windows:
+
+```yaml
+mcp_servers:
+  opencode:
+    command: 'C:\Program Files\nodejs\node.exe'
+    args: ['C:\Users\<you>\opencode-mcp-aihub\opencode-mcp.mjs']
+    timeout: 300
+    env:
+      SystemRoot: "${SystemRoot}"
+      USERPROFILE: "${USERPROFILE}"
+      APPDATA: "${APPDATA}"
+      LOCALAPPDATA: "${LOCALAPPDATA}"
+      TEMP: "${TEMP}"
+```
+
+Then run `/reload-mcp` in a Hermes chat.
+
+### 4b. The skill
+
+Hermes skills use the same `SKILL.md` format (agentskills.io):
+
+```bash
+mkdir -p ~/.hermes/skills
+cp -R ~/opencode-mcp-aihub/skills/opencode ~/.hermes/skills/
+```
+
+### 4c. What differs from Claude Code
+
+- **Use `opencode_run` + `opencode_wait`.** Hermes stops a tool call after `timeout` seconds (300 by
+  default). `opencode_run_sync` and `opencode_wait` return within about 90 s, but the blocking
+  `opencode_ask` waits for opencode to finish and can run longer.
+- **No completion wake-up.** The hook in 2c is Claude Code only. In Hermes, call `opencode_wait`
+  again while the state is `running`. Every result begins with `job_id`, `state`, `session_id`,
+  `cwd` and a `next:` line.
+- **Filtered environment.** Hermes gives MCP servers only a few variables (`PATH`, `HOME`,
+  `XDG_*` and similar) plus what you list under `env`. opencode still finds
+  `~/.config/opencode/opencode.jsonc` through `HOME`. Put any `OPENCODE_MCP_*` setting under `env`,
+  and on Windows the variables shown above. If opencode cannot start, the error names the missing
+  variables.
+- **Same machine.** opencode must be installed and configured where Hermes runs, and the `cwd` you
+  pass must exist there.
+- With `trust: untrusted`, Hermes asks before `opencode_run`, `opencode_run_sync`, `opencode_ask`
+  and `opencode_cancel`; the read-only tools are annotated and do not prompt.
+- Cancelling a tool call in Hermes does not stop the opencode job; use `opencode_cancel`.
+
+CI runs a client that reads only the text of each result, starts the server with a Hermes-style
+filtered environment and reconnects mid-job, on Linux, macOS and Windows. Hermes itself is not part
+of CI; reports from Hermes users are welcome.
+
+---
+
+## 5. Configuration (env vars)
+
+Set these in the `env` block (Claude Code), `env = { ... }` under `[mcp_servers.opencode]` (Codex) or
+`env:` under `mcp_servers.opencode` (Hermes):
 
 | Var | Default | Meaning |
 |---|---|---|
@@ -335,7 +405,7 @@ Set these in the `env` block (Claude Code) or `env = { ... }` under `[mcp_server
 | `OPENCODE_MCP_HOOK_TIMEOUT_MS` | `3600000` | hook-wait limit |
 | `OPENCODE_MCP_DEBUG` | unset | `1` logs to stderr |
 
-## 5. Customising the skill's model pools
+## 6. Customising the skill's model pools
 
 `skills/opencode/SKILL.md` has **High / Medium / Low** pools of model aliases. They reflect
 the author's AI Hub catalogue and will drift. Run `opencode models | grep ai-hub`, or call the
@@ -343,7 +413,7 @@ the author's AI Hub catalogue and will drift. Run `opencode models | grep ai-hub
 `opencode.jsonc` (section 1, step 3). Add a new alias to both, and remove one from both. Aliases are
 written without the `ai-hub/` prefix, which the skill adds when calling.
 
-## 6. Windows notes
+## 7. Windows notes
 
 - `where opencode` usually finds the npm shim `opencode.cmd`. Node can't spawn a `.cmd`
   without a shell, and a shell would mangle multi-line prompts. The server therefore resolves
@@ -354,7 +424,7 @@ written without the `ai-hub/` prefix, which the skill adds when calling.
 - If a call fails with `launch_failed`, set `OPENCODE_MCP_BIN` to the full path of `opencode.exe`.
 - The test suite runs on Windows in CI with a fake opencode.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|

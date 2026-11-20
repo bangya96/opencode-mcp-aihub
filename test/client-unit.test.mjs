@@ -168,6 +168,22 @@ test('doctor: healthy, missing default model, missing binary', async () => {
   assert.match(formatDoctor(missing), /\/x\/opencode/);
 });
 
+test('doctor: environment check counts mixed-case Windows names and warns on missing ones', async () => {
+  const { probe } = fakeProbe();
+  const launch = async () => ({ file: process.execPath, argsPrefix: [FAKE], source: 'env' });
+  const cfg = loadConfig({ OPENCODE_MCP_MODEL: 'ai-hub/model-a', OPENCODE_MCP_STATE_DIR: tmp('ocmcp-d-') });
+  const win = { Path: 'C:\\Windows', SYSTEMROOT: 'C:\\Windows', USERPROFILE: 'u', APPDATA: 'a', LOCALAPPDATA: 'l', TEMP: 't' };
+  const ok = await runDoctor({ config: cfg, resolveLaunch: launch, probeOpenCode: probe, platform: 'win32', env: win });
+  assert.equal(ok.checks.find((c) => c.name === 'environment').status, 'ok');
+  const filtered = await runDoctor({ config: cfg, resolveLaunch: launch, probeOpenCode: probe, platform: 'win32', env: { PATH: 'C:\\Windows', HOME: 'u' } });
+  const check = filtered.checks.find((c) => c.name === 'environment');
+  assert.equal(check.status, 'warn');
+  assert.match(check.detail, /SystemRoot, USERPROFILE, APPDATA, LOCALAPPDATA, TEMP/);
+  assert.equal(filtered.ok, true);
+  const posix = await runDoctor({ config: cfg, resolveLaunch: launch, probeOpenCode: probe, platform: 'linux', env: { PATH: '/usr/bin' } });
+  assert.match(posix.checks.find((c) => c.name === 'environment').detail, /^HOME not set/);
+});
+
 // ---------------------------------------------------------------- formatting
 
 const doneView = {

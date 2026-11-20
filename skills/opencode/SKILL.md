@@ -1,22 +1,29 @@
 ---
 name: opencode
 description: Delegate implementation, investigation, planning or code review to OpenCode through the opencode MCP tools (opencode_run / opencode_wait / opencode_ask) when the user asks to use OpenCode or explicitly assigns it a task. Triggers include "guna opencode", "suruh opencode", "ask opencode", and "delegate to opencode". Requests mentioning Terra or Gemini trigger this skill when the context clearly refers to the OpenCode worker.
+version: 2.1.0
+platforms: [macos, linux, windows]
 ---
 
 # OpenCode delegation
 
-Claude is the user's discussion partner, planner, and reviewer.
+You (the calling agent) are the user's discussion partner, planner, and reviewer.
 OpenCode is the delegated implementation or investigation agent.
+
+This skill works in any MCP client (Claude Code, Codex CLI, Hermes Agent, ...).
+Clients prefix MCP tool names differently (`mcp__opencode__opencode_run`,
+`opencode.opencode_run`, `mcp_opencode_opencode_run`, ...): use whatever names
+your client exposes for the opencode server's tools.
 
 Use the opencode MCP tools for delegation. This skill explains how to use them;
 it does not create the tools or grant execution permissions.
 
 ## Session and tool contract
 
-Treat every job as a fresh session without Claude's conversation history, unless
+Treat every job as a fresh session without your conversation history, unless
 you continue an earlier opencode session with `session_id`. OpenCode can inspect
 project files through its permitted tools, but decisions and requirements that
-exist only in Claude's conversation must be supplied.
+exist only in your conversation must be supplied.
 
 The v2 server exposes:
 
@@ -137,9 +144,13 @@ multiple independent attempts.
 ### Long jobs, timeouts and uncertain execution
 
 Prefer `opencode_run` for anything that may take more than a minute, then
-`opencode_wait` (repeat while it is running) or wait for the completion-wake
-hook. Jobs keep running if Claude Code restarts or the call is abandoned; find
-them again with `opencode_status`.
+`opencode_wait` (repeat while it is running). Claude Code with the optional
+completion-wake hook is woken when the job ends instead; other clients poll.
+Jobs keep running if the client restarts or the call is abandoned; find them
+again with `opencode_status`. Cancelling a tool call does not stop the job; use
+`opencode_cancel` for that. In clients with a short tool timeout (Hermes Agent
+defaults to 300 s), prefer `opencode_run` + `opencode_wait` over the blocking
+`opencode_ask`.
 
 A timeout or lost connection does not prove the worker stopped. Before starting
 another `edit` job in the same repository, check `opencode_status` and the
@@ -206,7 +217,7 @@ Carry existing authorization forward. Do not ask again for routine corrections
 within the approved scope. Ask when new decisions materially expand scope or
 change agreed behavior.
 
-Claude should delegate implementation and retain responsibility for independent
+You should delegate implementation and retain responsibility for independent
 review and testing. If delegation is blocked, report it rather than silently
 taking over development.
 
@@ -225,8 +236,8 @@ For edits:
 - For a small task, a complete prompt is sufficient; do not create unnecessary
   planning documents.
 
-Keep Claude and OpenCode from editing the same files concurrently. Ensure
-Claude later verifies the exact workspace where OpenCode worked.
+Keep yourself and OpenCode from editing the same files concurrently. Verify
+the exact workspace where OpenCode worked afterwards.
 
 ## Write a self-contained prompt
 
@@ -350,7 +361,7 @@ Briefly state:
 
 - What changed or what was found.
 - Which model was actually used, and whether fallback occurred when relevant.
-- What Claude independently verified.
+- What you independently verified.
 - Any remaining failures, limitations, or decisions.
 
 Do not describe partial or unverified work as fully complete.

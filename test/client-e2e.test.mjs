@@ -20,9 +20,22 @@ function gitRepo() {
   return repo;
 }
 
-function startServer(extraEnv = {}) {
-  const stateDir = tmp('ocmcp-e2e-state-');
-  const env = { ...process.env, OPENCODE_MCP_BIN: FAKE, OPENCODE_MCP_STATE_DIR: stateDir, ...extraEnv };
+// Roughly what a filtering MCP client passes a stdio server. POSIX: Hermes Agent's documented
+// baseline. Windows (undocumented for Hermes): the MCP Python SDK's default inherited set.
+const POSIX_BASELINE = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TERM', 'SHELL', 'TMPDIR'];
+const WINDOWS_BASELINE = ['APPDATA', 'HOMEDRIVE', 'HOMEPATH', 'LOCALAPPDATA', 'PATH', 'PATHEXT', 'PROCESSOR_ARCHITECTURE', 'SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'USERNAME', 'USERPROFILE'];
+
+function filteredEnv() {
+  const win = process.platform === 'win32';
+  const keep = new Set(win ? WINDOWS_BASELINE : POSIX_BASELINE);
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => (win ? keep.has(k.toUpperCase()) : keep.has(k) || k.startsWith('XDG_'))),
+  );
+}
+
+function startServer(extraEnv = {}, { baseEnv = process.env, stateDir: reuseState } = {}) {
+  const stateDir = reuseState || tmp('ocmcp-e2e-state-');
+  const env = { ...baseEnv, OPENCODE_MCP_BIN: FAKE, OPENCODE_MCP_STATE_DIR: stateDir, ...extraEnv };
   delete env.OPENCODE_MCP_MODEL;
   Object.assign(env, extraEnv);
   const child = spawn(process.execPath, [ENTRY], { env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
@@ -143,5 +156,59 @@ test('edit fallback stops after a tool call; background job, busy workspace, can
     assert.equal((await h.call('opencode_status', {})).content[0].text, 'No opencode runs in flight.');
   } finally {
     await h.close();
+  }
+});
+
+// A client that reads only the text content (never structuredContent), with a filtered
+// environment, that reconnects mid-job: roughly how Hermes Agent drives the server.
+test('text-only client with a filtered environment: plan, poll, reconnect, edit', async () => {
+  const text = (r) => r.content.map((c) => c.text).join('\n');
+  const repo = gitRepo();
+  let s = startServer({ FAKE_OC_SCENARIO: 'mutate' }, { baseEnv: filteredEnv() });
+  const { stateDir } = s;
+  let id;
+  try {
+    const started = text(await s.call('opencode_run', { prompt: 'plan it', mode: 'plan', cwd: repo, model: 'ai-hub/model-a' }));
+    id = (started.match(/^job_id: ([0-9a-f-]{36})$/m) || [])[1];
+    assert.ok(id, started);
+    assert.match(started, /^next: .*opencode_wait/m);
+    assert.ok(started.split('\n').includes(`cwd: ${repo}`), started);
+  } finally {
+    await s.close();
+  }
+
+  // Reconnect: a new server process on the same state dir finds and finishes the job.
+  s = startServer({ FAKE_OC_SCENARIO: 'mutate' }, { baseEnv: filteredEnv(), stateDir });
+  try {
+    let done;
+    for (let i = 0; i < 60 && !done; i++) {
+      const t = text(await s.call('opencode_wait', { job_id: id, wait_ms: 1000 }));
+      if (/^state: done/m.test(t)) done = t;
+      else assert.match(t, /^state: (starting|running)/m, t);
+    }
+    assert.ok(done, 'plan job did not finish');
+    assert.equal(existsSync(join(repo, 'fake-oc-wrote.txt')), false);
+    const sid = (done.match(/session_id: (ses_\S+)/) || [])[1];
+    assert.ok(sid, done);
+    const body = done.indexOf('--- response');
+    assert.ok(done.search(/^next: .*mode "edit", session_id "ses_/m) < body, done);
+
+    const edit = text(await s.call('opencode_run_sync', { prompt: 'The plan is approved. Implement it.', mode: 'edit', session_id: sid, cwd: repo, model: 'ai-hub/model-a', wait_ms: 30_000 }));
+    assert.match(edit, /^state: done/m, edit);
+    assert.match(edit, new RegExp(`session_id: ${sid}`));
+    assert.match(edit, /^changes: 1 file\(s\) changed .*fake-oc-wrote\.txt/m, edit);
+  } finally {
+    await s.close();
+  }
+});
+
+test('error results carry readable text', async () => {
+  const s = startServer({}, { baseEnv: filteredEnv() });
+  try {
+    const r = await s.call('opencode_status', { job_id: 'not-a-job' });
+    assert.equal(r.isError, true);
+    assert.match(r.content[0].text, /job_id/);
+  } finally {
+    await s.close();
   }
 });

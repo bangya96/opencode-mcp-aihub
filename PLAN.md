@@ -131,6 +131,7 @@ and lock release. `JobView`: `job_id, state, mode, cwd, created_at, elapsed_ms` 
 {model, category, elapsed_ms, session_id?, error?, tool_calls}], session_id, usage, changes` and, when
 failed, `failure_reason` (`FAILURE_REASONS` = the non-ok categories plus `interrupted`, `unknown`) and
 `error`. A committed terminal result wins over a racing cancel.
+Optional `result.text_truncated: true` indicates response text exceeded `max_output_chars`; omitted otherwise.
 
 ### Disk contract
 

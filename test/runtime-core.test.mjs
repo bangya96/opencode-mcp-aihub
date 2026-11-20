@@ -9,7 +9,7 @@ import { snapshot, compare } from '../lib/change-detection.mjs';
 import { loadConfig, READ_ONLY_AGENT, PLAN_PREAMBLE } from '../lib/contracts.mjs';
 import { buildInvocation, runAttempt, probeOpenCode } from '../lib/opencode.mjs';
 import { createJobStore, withStateLock, lockNames } from '../lib/jobs.mjs';
-import { atomicWriteJson, readJson, isAlive, killTree, resolveLaunch } from '../lib/platform.mjs';
+import { atomicWriteJson, readJson, isAlive, killTree, resolveLaunch, envGet } from '../lib/platform.mjs';
 
 const launch = { file: process.execPath, argsPrefix: [fileURLToPath(new URL('../fixtures/fake-opencode.mjs', import.meta.url))] };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -26,6 +26,40 @@ async function scenario(name, fn) {
   try { return await fn(); } finally { if (previous === undefined) delete process.env.FAKE_OC_SCENARIO; else process.env.FAKE_OC_SCENARIO = previous; }
 }
 
+test('envGet respects platform casing, exact-key precedence and unset values', () => {
+  assert.equal(envGet('PATH', { PATH: '/bin' }, 'linux'), '/bin');
+  assert.equal(envGet('PATH', { Path: 'first', PATH: 'exact' }, 'win32'), 'exact');
+  assert.equal(envGet('PATH', { Path: 'first', path: 'second' }, 'win32'), 'first');
+  assert.equal(envGet('SystemRoot', { systemroot: 'C:\\Windows' }, 'win32'), 'C:\\Windows');
+  for (const platform of ['linux', 'darwin']) {
+    assert.equal(envGet('PATH', { Path: '/bin' }, platform), undefined);
+    assert.equal(envGet('SystemRoot', { systemroot: '/windows' }, platform), undefined);
+  }
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    assert.equal(envGet('PATH', { PATH: '', Path: 'other' }, platform), undefined);
+    assert.equal(envGet('MISSING', {}, platform), undefined);
+  }
+  assert.equal(envGet('PATH', { Path: '' }, 'win32'), undefined);
+});
+test('text truncation is optional on attempts and persisted job results', async t => {
+  const { request, config } = await setup(t);
+  const response = 'OK from fake opencode ✓ é';
+  await scenario('ok', async () => {
+    for (const max_output_chars of [8, response.length, config.max_output_chars]) {
+      const runtime = { ...config, max_output_chars };
+      const attempt = await runAttempt(request, { config: runtime, launch });
+      const store = createJobStore({ config: runtime, launch });
+      const job = await store.start(request), done = await store.wait(job.job_id);
+      assert.equal(done.state, 'done');
+      const persisted = await readJson(join(config.state_dir, 'jobs', job.job_id, 'result.json'));
+      for (const result of [attempt, done.result, persisted.result]) {
+        assert.equal(result.text, response.slice(0, max_output_chars));
+        if (max_output_chars < response.length) assert.equal(result.text_truncated, true);
+        else assert.equal(Object.hasOwn(result, 'text_truncated'), false);
+      }
+    }
+  });
+});
 test('invocation modes, env merge, stdin/argv and safe titles', async t => {
   const { config, request } = await setup(t);
   for (const mode of ['ask', 'plan', 'edit']) for (const prompt_via_argv of [false, true]) {
